@@ -66,6 +66,45 @@ class PytrMcpApi:
     async def stock_detail_kpis(self, isin):
         return await self._request(self.tr.stock_detail_kpis(isin))
 
+    async def portfolio(self):
+        return await self._request(self.tr.portfolio())
+
+    async def portfolio_status(self):
+        return await self._request(self.tr.portfolio_status())
+
+    async def cash(self):
+        return await self._request(self.tr.cash())
+
+    async def available_cash_for_payout(self):
+        return await self._request(self.tr.available_cash_for_payout())
+
+    async def portfolio_history(self, timeframe):
+        return await self._request(self.tr.portfolio_history(timeframe))
+
+    async def performance(self, isin, exchange="LSX"):
+        return await self._request(self.tr.performance(isin, exchange))
+
+    async def performance_history(self, isin, timeframe, exchange="LSX", resolution=None):
+        return await self._request(self.tr.performance_history(isin, timeframe, exchange, resolution))
+
+    async def search_tags(self):
+        return await self._request(self.tr.search_tags())
+
+    async def search_suggested_tags(self, query):
+        return await self._request(self.tr.search_suggested_tags(query))
+
+    async def search_derivative(self, underlying_isin, product_type):
+        return await self._request(self.tr.search_derivative(underlying_isin, product_type))
+
+    async def price_for_order(self, isin, exchange, order_type):
+        return await self._request(self.tr.price_for_order(isin, exchange, order_type))
+
+    async def size_available_for_order(self, isin, exchange):
+        return await self._request(self.tr.size_available_for_order(isin, exchange))
+
+    async def timeline(self, after=None):
+        return await self._request(self.tr.timeline(after))
+
     async def timeline_transactions(self, after=None):
         return await self._request(self.tr.timeline_transactions(after))
 
@@ -74,6 +113,15 @@ class PytrMcpApi:
 
     async def timeline_detail(self, timeline_id):
         return await self._request(self.tr.timeline_detail(timeline_id))
+
+    async def timeline_detail_v2(self, timeline_id):
+        return await self._request(self.tr.timeline_detail_v2(timeline_id))
+
+    async def timeline_detail_order(self, order_id):
+        return await self._request(self.tr.timeline_detail_order(order_id))
+
+    async def timeline_detail_savings_plan(self, savings_plan_id):
+        return await self._request(self.tr.timeline_detail_savings_plan(savings_plan_id))
 
     async def aggregate_history_light(self, isin, range="1m", resolution=86400000, exchange="LSX"):
         return await self._request(self.tr.aggregate_history_light(isin, range, resolution, exchange))

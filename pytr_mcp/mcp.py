@@ -305,6 +305,145 @@ async def stock_kpis(isin: str) -> dict:
     return await call("stock_detail_kpis", valid_isin(isin))
 
 
+@mcp.tool(annotations=READ_ONLY)
+async def portfolio() -> dict:
+    """Return the raw brokerage portfolio subscription response.
+
+    Returns: JSON
+      {"categories":[{"positions":[]}]}
+    """
+    return await call("portfolio")
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def portfolio_status() -> dict:
+    """Return brokerage portfolio status.
+
+    Returns: JSON
+      {"status":"active"}
+    """
+    return await call("portfolio_status")
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def cash_accounts() -> dict:
+    """Return cash-account balances; this does not initiate a payout.
+
+    Returns: JSON
+      {"cash":[{"amount":100.0,"currencyId":"EUR"}]}
+    """
+    return await call("cash")
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def cash_available_for_payout() -> dict:
+    """Return the broker-reported amount available for payout. This tool cannot make a payout.
+
+    Returns: JSON
+      {"amount":100.0,"currencyId":"EUR"}
+    """
+    return await call("available_cash_for_payout")
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def portfolio_history(range: str = "1m") -> dict:
+    """Return portfolio aggregate history for a supported range.
+
+    Returns: JSON
+      {"history":[]}
+    """
+    if range not in RANGES:
+        raise ValueError(f"range must be one of {sorted(RANGES)}")
+    return await call("portfolio_history", range)
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def performance(isin: str, exchange: str = "LSX") -> dict:
+    """Return current instrument performance for an exchange.
+
+    Returns: JSON
+      {"performance":[]}
+    """
+    exchange = exchange.upper()
+    if exchange not in EXCHANGES:
+        raise ValueError(f"exchange must be one of {sorted(EXCHANGES)}")
+    return await call("performance", valid_isin(isin), exchange)
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def performance_history(isin: str, range: str = "1m", exchange: str = "LSX") -> dict:
+    """Return aggregate instrument performance history.
+
+    Returns: JSON
+      {"data":[]}
+    """
+    exchange = exchange.upper()
+    if range not in RANGES or exchange not in EXCHANGES:
+        raise ValueError("invalid range or exchange")
+    return await call("performance_history", valid_isin(isin), range, exchange)
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def search_tags() -> dict:
+    """Return available broker instrument-search tags.
+
+    Returns: JSON
+      {"tags":[]}
+    """
+    return await call("search_tags")
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def search_suggested_tags(query: str) -> dict:
+    """Return suggested search tags for a non-empty query.
+
+    Returns: JSON
+      {"tags":[]}
+    """
+    query = query.strip()
+    if not query:
+        raise ValueError("query is required")
+    return await call("search_suggested_tags", query)
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def search_derivative(underlying_isin: str, product_type: str) -> dict:
+    """Search derivatives for an underlying ISIN and broker product type.
+
+    Returns: JSON
+      {"results":[]}
+    """
+    if not product_type.strip():
+        raise ValueError("product_type is required")
+    return await call("search_derivative", valid_isin(underlying_isin), product_type)
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def price_for_order(isin: str, order_type: str, exchange: str = "LSX") -> dict:
+    """Return a broker order-price preflight quote; it cannot place an order.
+
+    Returns: JSON
+      {"price":100.0}
+    """
+    exchange, order_type = exchange.upper(), order_type.lower()
+    if exchange not in EXCHANGES or order_type not in ORDER_TYPES:
+        raise ValueError("invalid exchange or order_type")
+    return await call("price_for_order", valid_isin(isin), exchange, order_type)
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def size_available_for_order(isin: str, exchange: str = "LSX") -> dict:
+    """Return broker order-size availability; it cannot place an order.
+
+    Returns: JSON
+      {"size":0.0}
+    """
+    exchange = exchange.upper()
+    if exchange not in EXCHANGES:
+        raise ValueError(f"exchange must be one of {sorted(EXCHANGES)}")
+    return await call("size_available_for_order", valid_isin(isin), exchange)
+
+
 def history_range(start: date) -> str:
     days = (datetime.now(timezone.utc).date() - start).days
     if days <= 31:
@@ -365,6 +504,52 @@ async def price_change(isin: str, start_date: str, end_date: str | None = None, 
         "delta": delta,
         "percentDelta": round(delta / first["close"] * 100, 2),
     }
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def timeline(after: str | None = None) -> dict:
+    """Return a unified broker timeline page.
+
+    Returns: JSON
+      {"items":[],"cursors":{}}
+    """
+    return await call("timeline", after)
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def timeline_detail_v2(timeline_id: str) -> dict:
+    """Return v2 detail for a non-empty timeline ID.
+
+    Returns: JSON
+      {"id":"timeline-id","sections":[]}
+    """
+    if not timeline_id:
+        raise ValueError("timeline_id is required")
+    return await call("timeline_detail_v2", timeline_id)
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def timeline_detail_order(order_id: str) -> dict:
+    """Return timeline detail associated with a broker order ID.
+
+    Returns: JSON
+      {"sections":[]}
+    """
+    if not order_id:
+        raise ValueError("order_id is required")
+    return await call("timeline_detail_order", order_id)
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def timeline_detail_savings_plan(savings_plan_id: str) -> dict:
+    """Return timeline detail associated with a broker savings-plan ID.
+
+    Returns: JSON
+      {"sections":[]}
+    """
+    if not savings_plan_id:
+        raise ValueError("savings_plan_id is required")
+    return await call("timeline_detail_savings_plan", savings_plan_id)
 
 
 @mcp.tool(annotations=READ_ONLY)
