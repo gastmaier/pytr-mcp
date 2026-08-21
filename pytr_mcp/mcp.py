@@ -5,7 +5,6 @@ import csv
 import json
 import math
 import re
-import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout
 from datetime import date, datetime, timezone
@@ -121,20 +120,20 @@ async def renew_session() -> dict:
 @mcp.tool(annotations=READ_ONLY)
 async def session_status() -> dict:
     """Confirm that the local Trade Republic browser session can be resumed."""
-    await call("available_cash")
+    await call("cash_available_for_order")
     return {"authenticated": True, "mode": "read-only" if not any(capabilities().values()) else "mutation-enabled", "capabilities": capabilities()}
 
 
 @mcp.tool(annotations=READ_ONLY)
 async def available_cash() -> list[dict]:
     """Return cash in every Trade Republic cash account; it is separate from brokerage portfolio value."""
-    return await call("available_cash")
+    return await call("cash_available_for_order")
 
 
 @mcp.tool(annotations=READ_ONLY)
 async def current_orders() -> dict:
     """Return currently open orders. This tool cannot modify or cancel them."""
-    return await call("orders")
+    return await call("order_overview")
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -171,7 +170,7 @@ async def wallet_positions() -> list[dict]:
       [{"isin":"US0378331005","name":"APPLE INC.","quantity":2.0,"averageBuyIn":180.0,"currentPrice":190.0,"currentValue":380.0,"unrealizedPnl":20.0,"unrealizedPnlPct":5.56}]
     """
     result = []
-    for position in await call("wallet_positions_with_quotes"):
+    for position in await call("compact_portfolio"):
         current_price = float(position["quote"]["last"]["price"])
         quantity = float(position["netSize"])
         average_buy_in = float(position["averageBuyIn"])
@@ -201,7 +200,7 @@ async def instrument_search(query: str, limit: int = 10) -> list[dict]:
         raise ValueError("query is required")
     if not 1 <= limit <= 20:
         raise ValueError("limit must be between 1 and 20")
-    return await call("isins_by_name", query, limit)
+    return await call("search", query, limit)
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -211,7 +210,7 @@ async def watchlist() -> str:
     Returns: CSV
       Name,ISIN,Price,Daily relative
     """
-    items = await call("watchlist_details")
+    items = await call("watchlist")
     output = StringIO()
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(["Name", "ISIN", "Price", "Daily relative"])
@@ -268,7 +267,7 @@ async def stock_news(isin: str, limit: int = 10) -> list[dict]:
     """Return recent news articles for a stock instrument."""
     if not 1 <= limit <= 50:
         raise ValueError("limit must be between 1 and 50")
-    articles = await call("neon_news", valid_isin(isin))
+    articles = await call("news", valid_isin(isin))
     return [
         {
             "id": article.get("id"),
@@ -434,7 +433,7 @@ async def price_alarms() -> str:
       name,instrumentId,status,createdPrice,targetPrice,createdAt,triggeredAt
       APPLE INC.,US0378331005,active,180.0,190.0,1750000000000
     """
-    alarms = await call("price_alarms_with_names")
+    alarms = await call("price_alarm_overview")
     output = StringIO()
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(["name", "instrumentId", "status", "createdPrice", "targetPrice", "createdAt", "triggeredAt"])
@@ -549,16 +548,7 @@ def configure_mutation_tools(allow_orders, allow_watchlist):
                         raise ValueError("stop-market sell trigger must be below the current bid")
             if normalized_expiry not in EXPIRIES:
                 raise ValueError(f"expiry must be one of {sorted(EXPIRIES)}")
-            client_process_id = str(uuid.uuid4())
-            account_pairs = await call("account_pairs")
-            account = next(
-                (item for item in account_pairs.get("accounts", []) if item.get("productType") == "DEFAULT" and item.get("securitiesAccountNumber")),
-                None,
-            )
-            if account is None:
-                raise RuntimeError("No brokerage securities account is available")
             request = {
-                "clientProcessId": client_process_id,
                 "isin": valid_isin(isin),
                 "side": normalized_side,
                 "mode": normalized_mode,
@@ -569,22 +559,24 @@ def configure_mutation_tools(allow_orders, allow_watchlist):
                 "exchange": normalized_exchange,
             }
             try:
-                response = await call(
-                    "simple_create_order",
-                    client_process_id,
-                    account["securitiesAccountNumber"],
-                    request["isin"],
-                    normalized_side,
-                    normalized_mode,
-                    request["quantity"],
-                    request["price"],
-                    normalized_expiry,
-                    normalized_exchange,
-                )
+                if normalized_mode == "market":
+                    response = await call(
+                        "market_order", request["isin"], normalized_exchange, normalized_side,
+                        request["quantity"], normalized_expiry, False,
+                    )
+                elif normalized_mode == "limit":
+                    response = await call(
+                        "limit_order", request["isin"], normalized_exchange, normalized_side,
+                        request["quantity"], request["price"], normalized_expiry,
+                    )
+                else:
+                    response = await call(
+                        "stop_market_order", request["isin"], normalized_exchange, normalized_side,
+                        request["quantity"], request["price"], normalized_expiry,
+                    )
             except Exception as error:
                 audit("create_order", request, {"error": str(error)})
                 raise
-            response["clientProcessId"] = client_process_id
             audit("create_order", request, response)
             return response
 

@@ -7,7 +7,7 @@ from pytr.api import TradeRepublicApi
 
 
 class PytrMcpApi:
-    """Async pytr adapter preserving the MCP's existing backend method names."""
+    """Async pytr client with local instrument lookup helpers."""
 
     _isin_names = None
     _isin_records = None
@@ -42,22 +42,22 @@ class PytrMcpApi:
     async def _request(self, subscription):
         return await self.tr.request(subscription)
 
-    async def available_cash(self):
+    async def cash_available_for_order(self):
         return await self._request(self.tr.cash_available_for_order())
 
-    async def orders(self):
+    async def order_overview(self):
         return await self._request(self.tr.order_overview())
 
     async def account_pairs(self):
         return await self._request(self.tr.account_pairs())
 
-    async def instrument(self, isin):
+    async def instrument_details(self, isin):
         return await self._request(self.tr.instrument_details(isin))
 
     async def ticker(self, isin, exchange="LSX"):
         return await self._request(self.tr.ticker(isin, exchange))
 
-    async def neon_news(self, isin):
+    async def news(self, isin):
         return await self._request(self.tr.news(isin))
 
     async def stock_details(self, isin):
@@ -109,7 +109,7 @@ class PytrMcpApi:
         name = type(self)._isin_names.get(isin)
         if name:
             return name
-        instrument = await self.instrument(isin)
+        instrument = await self.instrument_details(isin)
         name = instrument.get("shortName") or instrument.get("name") or isin
         type(self)._isin_names[isin] = name
         return name
@@ -117,12 +117,12 @@ class PytrMcpApi:
     async def names_by_isin(self, isins):
         return {isin: await self.name_by_isin(isin) for isin in dict.fromkeys(isins)}
 
-    async def price_alarms_with_names(self):
+    async def price_alarm_overview(self):
         alarms = await self._request(self.tr.price_alarm_overview())
         names = await self.names_by_isin(alarm.get("instrumentId") for alarm in alarms)
         return [{**alarm, "name": names.get(alarm.get("instrumentId"), "")} for alarm in alarms]
 
-    async def wallet_positions_with_quotes(self):
+    async def compact_portfolio(self):
         portfolio = await self._request(self.tr.compact_portfolio())
         positions = [position for category in portfolio.get("categories", []) for position in category.get("positions", [])]
         names = await self.names_by_isin(position["isin"] for position in positions)
@@ -136,7 +136,7 @@ class PytrMcpApi:
             })
         return result
 
-    async def isins_by_name(self, query, limit=10):
+    async def search(self, query, limit=10):
         normalized_query = self._normalize_instrument_query(query)
         type(self)._load_isin_data()
         local_results = []
@@ -190,23 +190,23 @@ class PytrMcpApi:
     async def cancel_order(self, order_id):
         return await self._request(self.tr.cancel_order(order_id))
 
-    async def simple_create_order(self, _process_id, _account, isin, order_type, mode, size, price, expiry, exchange="LSX"):
-        if mode == "market":
-            subscription = self.tr.market_order(isin, exchange, order_type, size, expiry, sell_fractions=False)
-        elif mode == "limit":
-            subscription = self.tr.limit_order(isin, exchange, order_type, size, price, expiry)
-        else:
-            subscription = self.tr.stop_market_order(isin, exchange, order_type, size, price, expiry)
-        return await self._request(subscription)
+    async def market_order(self, isin, exchange, order_type, size, expiry, sell_fractions=False):
+        return await self._request(self.tr.market_order(isin, exchange, order_type, size, expiry, sell_fractions))
 
-    async def watchlist_details(self):
+    async def limit_order(self, isin, exchange, order_type, size, price, expiry):
+        return await self._request(self.tr.limit_order(isin, exchange, order_type, size, price, expiry))
+
+    async def stop_market_order(self, isin, exchange, order_type, size, price, expiry):
+        return await self._request(self.tr.stop_market_order(isin, exchange, order_type, size, price, expiry))
+
+    async def watchlist(self):
         entries = await self._request(self.tr.watchlist())
         result = []
         for entry in entries:
             isin = entry.get("isin") or entry.get("instrumentId")
             if not isin:
                 continue
-            instrument = await self.instrument(isin)
+            instrument = await self.instrument_details(isin)
             quote = await self.ticker(isin)
             result.append({
                 "isin": isin,
