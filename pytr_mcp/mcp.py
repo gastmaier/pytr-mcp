@@ -249,8 +249,14 @@ async def market_overview(category: str = "all", limit: int = 10) -> dict:
 
 @mcp.tool(annotations=READ_ONLY)
 async def instrument(isin: str) -> dict:
-    """Return detailed instrument metadata for an ISIN."""
-    return await call("instrument", valid_isin(isin))
+    """Return detailed metadata for an ISIN.
+    Args:
+      isin: for example "US0378331005" for Apple.
+
+    Returns: JSON
+      {"isin":"US0378331005","shortName":"Apple","typeId":"stock"}
+    """
+    return await call("instrument_details", valid_isin(isin))
 
 
 @mcp.tool(annotations=READ_ONLY)
