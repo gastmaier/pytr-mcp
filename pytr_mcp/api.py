@@ -216,54 +216,53 @@ class PytrMcpApi:
             })
         return result
 
+    async def _primary_screener_id(self):
+        screeners = [screener for screener in await self.tr.screeners() if screener.get("id")]
+        if not screeners:
+            raise RuntimeError("Trade Republic did not provide an available screener")
+        return min(screeners, key=lambda screener: screener.get("rank", float("inf")))["id"]
+
     async def market_overview(self, category="all", limit=10):
-        def fetch(category):
-            sort_by = {
-                "gainers": "technical.deltaClosingPricePctToday",
-                "losers": "technical.deltaClosingPricePctToday",
-                "traded": "technical.volumeToday",
-            }
-            response = self.tr._websession.post(
-                f"{self.tr._host}/api-gateway/screeners/api/v2/screeners/0d0997ac-9021-4796-aeef-7d04e23b85fc/items/query",
-                headers=self.tr._login_headers(),
-                params=[
-                    ("pageSize", limit),
-                    ("sortBy", sort_by[category]),
-                    ("sortOrder", "asc" if category == "losers" else "desc"),
-                    *[("columns", column) for column in ("isin", "core.shortName", "technical.quoteLastPriceToday", "technical.deltaClosingPricePctToday", "technical.volumeToday")],
-                ],
-                json=[],
+        screener_id = await self._primary_screener_id()
+        columns = ("isin", "core.shortName", "technical.quoteLastPriceToday", "technical.deltaClosingPricePctToday", "technical.volumeToday")
+        sort_by = {
+            "gainers": "technical.deltaClosingPricePctToday",
+            "losers": "technical.deltaClosingPricePctToday",
+            "traded": "technical.volumeToday",
+        }
+
+        async def fetch(kind):
+            response = await self.tr.screener_items(
+                screener_id, columns, page_size=limit, sort_by=sort_by[kind],
+                sort_order="asc" if kind == "losers" else "desc",
             )
-            response.raise_for_status()
-            return {"items": [
+            return [
                 {"isin": item.get("isin"), "name": item.get("core.shortName"), "price": item.get("technical.quoteLastPriceToday"), "changePct": item.get("technical.deltaClosingPricePctToday"), "volume": item.get("technical.volumeToday")}
-                for item in response.json().get("items", [])
-            ]}
+                for item in response.get("items", [])
+            ]
+
         if category == "all":
-            return {"gainers": (await asyncio.to_thread(fetch, "gainers"))["items"], "losers": (await asyncio.to_thread(fetch, "losers"))["items"], "mostTraded": (await asyncio.to_thread(fetch, "traded"))["items"]}
-        return await asyncio.to_thread(fetch, category)
+            return {"gainers": await fetch("gainers"), "losers": await fetch("losers"), "mostTraded": await fetch("traded")}
+        return {"items": await fetch(category)}
 
     async def sector_market_overview(self, limit=200):
-        def fetch():
-            response = self.tr._websession.post(
-                f"{self.tr._host}/api-gateway/screeners/api/v2/screeners/0d0997ac-9021-4796-aeef-7d04e23b85fc/items/query",
-                headers=self.tr._login_headers(),
-                params=[("pageSize", limit), ("sortBy", "fundamental.marketCap"), ("sortOrder", "desc"), *[("columns", column) for column in ("isin", "core.shortName", "descriptive.sectors", "fundamental.marketCap", "technical.deltaClosingPricePctToday")]],
-                json=[],
-            )
-            response.raise_for_status()
-            buckets = {}
-            for item in response.json().get("items", []):
-                market_cap, change = item.get("fundamental.marketCap"), item.get("technical.deltaClosingPricePctToday")
-                if market_cap is None or change is None:
-                    continue
-                sector = next((value for value in item.get("descriptive.sectors", []) if value != "largecap"), "unclassified")
-                bucket = buckets.setdefault(sector, {"marketCap": 0.0, "weightedChange": 0.0, "stocks": []})
-                bucket["marketCap"] += float(market_cap)
-                bucket["weightedChange"] += float(market_cap) * float(change)
-                bucket["stocks"].append({"name": item.get("core.shortName"), "isin": item.get("isin"), "marketCap": float(market_cap)})
-            return [{"sector": sector.replace("_", " ").title(), "marketCap": round(bucket["marketCap"], 2), "dailyRelativePct": round(bucket["weightedChange"] / bucket["marketCap"] * 100, 2), "stockCount": len(bucket["stocks"]), "topStocks": sorted(bucket["stocks"], key=lambda stock: stock["marketCap"], reverse=True)[:5]} for sector, bucket in sorted(buckets.items(), key=lambda entry: entry[1]["marketCap"], reverse=True)]
-        return await asyncio.to_thread(fetch)
+        response = await self.tr.screener_items(
+            await self._primary_screener_id(),
+            ("isin", "core.shortName", "descriptive.sectors", "fundamental.marketCap", "technical.deltaClosingPricePctToday"),
+            page_size=limit,
+            sort_by="fundamental.marketCap",
+        )
+        buckets = {}
+        for item in response.get("items", []):
+            market_cap, change = item.get("fundamental.marketCap"), item.get("technical.deltaClosingPricePctToday")
+            if market_cap is None or change is None:
+                continue
+            sector = next((value for value in item.get("descriptive.sectors", []) if value != "largecap"), "unclassified")
+            bucket = buckets.setdefault(sector, {"marketCap": 0.0, "weightedChange": 0.0, "stocks": []})
+            bucket["marketCap"] += float(market_cap)
+            bucket["weightedChange"] += float(market_cap) * float(change)
+            bucket["stocks"].append({"name": item.get("core.shortName"), "isin": item.get("isin"), "marketCap": float(market_cap)})
+        return [{"sector": sector.replace("_", " ").title(), "marketCap": round(bucket["marketCap"], 2), "dailyRelativePct": round(bucket["weightedChange"] / bucket["marketCap"] * 100, 2), "stockCount": len(bucket["stocks"]), "topStocks": sorted(bucket["stocks"], key=lambda stock: stock["marketCap"], reverse=True)[:5]} for sector, bucket in sorted(buckets.items(), key=lambda entry: entry[1]["marketCap"], reverse=True)]
 
     async def portfolio_chart(self, account_number, range="1d", currency="EUR"):
         def fetch():
