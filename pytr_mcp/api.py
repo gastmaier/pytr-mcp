@@ -1,4 +1,6 @@
 import asyncio
+import json
+import re
 from pathlib import Path
 
 from pytr.api import TradeRepublicApi
@@ -6,6 +8,10 @@ from pytr.api import TradeRepublicApi
 
 class PytrMcpApi:
     """Async pytr adapter preserving the MCP's existing backend method names."""
+
+    _isin_names = None
+    _isin_records = None
+    _isin_dataset_updated_at = None
 
     def __init__(self, phone_no, pin, locale="en", cookies_file=None):
         self.tr = TradeRepublicApi(
@@ -72,28 +78,86 @@ class PytrMcpApi:
     async def aggregate_history_light(self, isin, range="1m", resolution=86400000, exchange="LSX"):
         return await self._request(self.tr.aggregate_history_light(isin, range, resolution, exchange))
 
+    @classmethod
+    def _load_isin_data(cls):
+        if cls._isin_names is not None:
+            return
+        path = Path(__file__).with_name("isins.json")
+        items = json.loads(path.read_text())
+        cls._isin_names = {item[1]: " ".join(item[2].split()) for item in items}
+        cls._isin_records = [
+            {
+                "wkn": item[0],
+                "isin": item[1],
+                "name": " ".join(item[2].split()),
+                "symbol": item[2].split("\n", 1)[1] if "\n" in item[2] else item[3],
+                "type": item[3] if "\n" in item[2] else None,
+            }
+            for item in items
+        ]
+        cls._isin_dataset_updated_at = path.stat().st_mtime
+
+    @staticmethod
+    def _normalize_instrument_query(value):
+        return " ".join(re.findall(r"[A-Z0-9]+", value.upper()))
+
+    async def name_by_isin(self, isin):
+        if not isin:
+            return ""
+        isin = isin.upper()
+        type(self)._load_isin_data()
+        name = type(self)._isin_names.get(isin)
+        if name:
+            return name
+        instrument = await self.instrument(isin)
+        name = instrument.get("shortName") or instrument.get("name") or isin
+        type(self)._isin_names[isin] = name
+        return name
+
+    async def names_by_isin(self, isins):
+        return {isin: await self.name_by_isin(isin) for isin in dict.fromkeys(isins)}
+
     async def price_alarms_with_names(self):
         alarms = await self._request(self.tr.price_alarm_overview())
-        names = {}
-        for isin in {alarm.get("instrumentId") for alarm in alarms} - {None}:
-            names[isin] = (await self.instrument(isin)).get("shortName", isin)
+        names = await self.names_by_isin(alarm.get("instrumentId") for alarm in alarms)
         return [{**alarm, "name": names.get(alarm.get("instrumentId"), "")} for alarm in alarms]
 
     async def wallet_positions_with_quotes(self):
         portfolio = await self._request(self.tr.compact_portfolio())
         positions = [position for category in portfolio.get("categories", []) for position in category.get("positions", [])]
+        names = await self.names_by_isin(position["isin"] for position in positions)
         result = []
         for position in positions:
             isin = position["isin"]
-            instrument = await self.instrument(isin)
             result.append({
                 **position,
-                "name": instrument.get("shortName") or instrument.get("name") or isin,
+                "name": names[isin],
                 "quote": await self.ticker(isin, "LSX"),
             })
         return result
 
     async def isins_by_name(self, query, limit=10):
+        normalized_query = self._normalize_instrument_query(query)
+        type(self)._load_isin_data()
+        local_results = []
+        for record in type(self)._isin_records:
+            normalized_name = self._normalize_instrument_query(record["name"])
+            normalized_symbol = self._normalize_instrument_query(record["symbol"])
+            if normalized_query == record["isin"] or normalized_query in (normalized_name, normalized_symbol, record["wkn"]):
+                rank = 0
+            elif normalized_name.startswith(normalized_query) or normalized_symbol.startswith(normalized_query):
+                rank = 1
+            elif normalized_query in normalized_name or normalized_query in normalized_symbol:
+                rank = 2
+            else:
+                continue
+            local_results.append((rank, record))
+        if local_results:
+            return [
+                {**record, "source": "LS/isins.json", "datasetUpdatedAt": type(self)._isin_dataset_updated_at}
+                for _, record in sorted(local_results, key=lambda item: (item[0], item[1]["name"]))[:limit]
+            ]
+
         results = []
         seen = set()
         for asset_type in ("stock", "fund", "derivative", "crypto"):

@@ -17,3 +17,4 @@ pytr-mcp = "pytr_mcp.mcp:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pytr_mcp"]
+force-include = { "pytr_mcp/isins.json" = "pytr_mcp/isins.json" }
