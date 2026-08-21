@@ -488,7 +488,15 @@ def configure_mutation_tools(allow_orders, allow_watchlist):
 
         @mcp.tool(annotations=MUTATION)
         async def create_price_alarm(isin: str, target_price: float) -> dict:
-            """Create a live price alarm for an ISIN at a positive target price."""
+            """Create a live price alarm for an ISIN at a positive target price.
+
+            Args:
+              isin: ISIN
+              target_price: Target price in type float
+
+            Returns: JSON
+              {"status": "succeeded","alarmId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"}
+            """
             request = {"isin": valid_isin(isin), "targetPrice": positive_number(target_price, "target_price")}
             try:
                 response = await call("create_price_alarm", request["isin"], request["targetPrice"])
