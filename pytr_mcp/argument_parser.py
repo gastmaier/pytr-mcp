@@ -10,6 +10,8 @@ def add_arguments(parser):
                         help='Enable live order placement and cancellation')
     parser.add_argument('--allow-watchlist', action='store_true',
                         help='Enable adding and removing instruments from the watchlist')
+    parser.add_argument('--allow-savings-plans', action='store_true',
+                        help='Enable live savings-plan creation, changes, and cancellation')
 
 
 def get_arguments():

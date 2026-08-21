@@ -25,6 +25,7 @@ LOCALE = "en"
 CURRENCY = "EUR"
 ALLOW_ORDERS = False
 ALLOW_WATCHLIST = False
+ALLOW_SAVINGS_PLANS = False
 AUDIT_LOG = Path.home() / ".local" / "state" / "trade-republic" / "mcp-audit.jsonl"
 ISIN_PATTERN = re.compile(r"[A-Z0-9]{12}")
 EXCHANGES = {"LSX", "TDG", "LUS", "TUB", "BHS", "B2C"}
@@ -107,7 +108,12 @@ def audit(action, request, response):
 
 
 def capabilities():
-    return {"priceAlerts": ALLOW_WATCHLIST, "orders": ALLOW_ORDERS, "watchlist": ALLOW_WATCHLIST}
+    return {
+        "priceAlerts": ALLOW_WATCHLIST,
+        "orders": ALLOW_ORDERS,
+        "watchlist": ALLOW_WATCHLIST,
+        "savingsPlans": ALLOW_SAVINGS_PLANS,
+    }
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -432,6 +438,26 @@ async def realized_trades(after: str | None = None) -> list[dict]:
 
 
 @mcp.tool(annotations=READ_ONLY)
+async def savings_plan_overview() -> dict:
+    """Return all savings plans and their current configuration.
+
+    Returns: JSON
+      {"savingsPlans":[{"id":"plan-id","instrumentId":"US0378331005","amount":50.0}]}
+    """
+    return await call("savings_plan_overview")
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def savings_plan_parameters(isin: str) -> dict:
+    """Return allowed savings-plan parameters for an ISIN. Call with `{"isin":"US0378331005"}`.
+
+    Returns: JSON
+      {"intervals":["monthly"],"minimumAmount":1.0}
+    """
+    return await call("savings_plan_parameters", valid_isin(isin))
+
+
+@mcp.tool(annotations=READ_ONLY)
 async def price_alarms() -> str:
     """Get active and triggered price alarms as compact CSV with asset names.
 
@@ -451,10 +477,11 @@ async def price_alarms() -> str:
     return output.getvalue().rstrip("\n")
 
 
-def configure_mutation_tools(allow_orders, allow_watchlist):
-    global ALLOW_ORDERS, ALLOW_WATCHLIST
+def configure_mutation_tools(allow_orders, allow_watchlist, allow_savings_plans):
+    global ALLOW_ORDERS, ALLOW_WATCHLIST, ALLOW_SAVINGS_PLANS
     ALLOW_ORDERS = allow_orders
     ALLOW_WATCHLIST = allow_watchlist
+    ALLOW_SAVINGS_PLANS = allow_savings_plans
     enabled = []
 
     if allow_watchlist:
@@ -608,6 +635,52 @@ def configure_mutation_tools(allow_orders, allow_watchlist):
             audit("cancel_order", request, response)
             return response
 
+    if allow_savings_plans:
+        enabled.append("savings-plan mutations")
+
+        @mcp.tool(annotations=MUTATION)
+        async def create_savings_plan(isin: str, amount: float, interval: str, start_date: str, start_date_type: str, start_date_value: str) -> dict:
+            """Create a live savings plan. Use only values returned by `savings_plan_parameters`.
+
+            Example: `{"isin":"US0378331005","amount":50,"interval":"monthly","start_date":"2026-09-02","start_date_type":"dayOfMonth","start_date_value":"2"}`
+            """
+            request = {"isin": valid_isin(isin), "amount": positive_number(amount, "amount"), "interval": interval, "startDate": start_date, "startDateType": start_date_type, "startDateValue": start_date_value}
+            try:
+                response = await call("create_savings_plan", request["isin"], request["amount"], interval, start_date, start_date_type, start_date_value)
+            except Exception as error:
+                audit("create_savings_plan", request, {"error": str(error)})
+                raise
+            audit("create_savings_plan", request, response)
+            return response
+
+        @mcp.tool(annotations=MUTATION)
+        async def change_savings_plan(savings_plan_id: str, isin: str, amount: float, interval: str, start_date: str, start_date_type: str, start_date_value: str) -> dict:
+            """Change a live savings plan. Use only values returned by `savings_plan_parameters`."""
+            if not savings_plan_id:
+                raise ValueError("savings_plan_id is required")
+            request = {"savingsPlanId": savings_plan_id, "isin": valid_isin(isin), "amount": positive_number(amount, "amount"), "interval": interval, "startDate": start_date, "startDateType": start_date_type, "startDateValue": start_date_value}
+            try:
+                response = await call("change_savings_plan", savings_plan_id, request["isin"], request["amount"], interval, start_date, start_date_type, start_date_value)
+            except Exception as error:
+                audit("change_savings_plan", request, {"error": str(error)})
+                raise
+            audit("change_savings_plan", request, response)
+            return response
+
+        @mcp.tool(annotations=MUTATION)
+        async def cancel_savings_plan(savings_plan_id: str) -> dict:
+            """Cancel a live savings plan by its broker savings-plan ID."""
+            if not savings_plan_id:
+                raise ValueError("savings_plan_id is required")
+            request = {"savingsPlanId": savings_plan_id}
+            try:
+                response = await call("cancel_savings_plan", savings_plan_id)
+            except Exception as error:
+                audit("cancel_savings_plan", request, {"error": str(error)})
+                raise
+            audit("cancel_savings_plan", request, response)
+            return response
+
     mcp._lowlevel_server.instructions = (
         "Access to a local Trade Republic session. Live broker mutations can create, cancel, or change account state. "
         f"Enabled capabilities: {', '.join(enabled) if enabled else 'read-only only'}."
@@ -620,7 +693,7 @@ def main():
     args = get_arguments()
     LOCALE = args.locale
     CURRENCY = args.currency
-    configure_mutation_tools(args.allow_orders, args.allow_watchlist)
+    configure_mutation_tools(args.allow_orders, args.allow_watchlist, args.allow_savings_plans)
     mcp.run()
 
 

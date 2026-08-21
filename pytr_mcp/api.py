@@ -190,6 +190,21 @@ class PytrMcpApi:
     async def cancel_order(self, order_id):
         return await self._request(self.tr.cancel_order(order_id))
 
+    async def savings_plan_overview(self):
+        return await self._request(self.tr.savings_plan_overview())
+
+    async def savings_plan_parameters(self, isin):
+        return await self._request(self.tr.savings_plan_parameters(isin))
+
+    async def create_savings_plan(self, isin, amount, interval, start_date, start_date_type, start_date_value):
+        return await self._request(self.tr.create_savings_plan(isin, amount, interval, start_date, start_date_type, start_date_value))
+
+    async def change_savings_plan(self, savings_plan_id, isin, amount, interval, start_date, start_date_type, start_date_value):
+        return await self._request(self.tr.change_savings_plan(savings_plan_id, isin, amount, interval, start_date, start_date_type, start_date_value))
+
+    async def cancel_savings_plan(self, savings_plan_id):
+        return await self._request(self.tr.cancel_savings_plan(savings_plan_id))
+
     async def market_order(self, isin, exchange, order_type, size, expiry, sell_fractions=False):
         return await self._request(self.tr.market_order(isin, exchange, order_type, size, expiry, sell_fractions))
 
