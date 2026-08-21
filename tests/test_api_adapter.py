@@ -31,7 +31,6 @@ def test_read_only_adapter_methods_delegate_to_the_matching_pytr_method():
         ("portfolio_status", (), "portfolio_status"),
         ("cash", (), "cash"),
         ("available_cash_for_payout", (), "available_cash_for_payout"),
-        ("portfolio_history", ("1m",), "portfolio_history"),
         ("performance", ("US0378331005", "LSX"), "performance"),
         ("performance_history", ("US0378331005", "1m", "LSX"), "performance_history"),
         ("search_tags", (), "search_tags"),

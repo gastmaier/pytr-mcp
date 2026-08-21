@@ -78,9 +78,6 @@ class PytrMcpApi:
     async def available_cash_for_payout(self):
         return await self._request(self.tr.available_cash_for_payout())
 
-    async def portfolio_history(self, timeframe):
-        return await self._request(self.tr.portfolio_history(timeframe))
-
     async def performance(self, isin, exchange="LSX"):
         return await self._request(self.tr.performance(isin, exchange))
 

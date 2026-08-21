@@ -346,18 +346,6 @@ async def cash_available_for_payout() -> dict:
 
 
 @mcp.tool(annotations=READ_ONLY)
-async def portfolio_history(range: str = "1m") -> dict:
-    """Return portfolio aggregate history for a supported range.
-
-    Returns: JSON
-      {"history":[]}
-    """
-    if range not in RANGES:
-        raise ValueError(f"range must be one of {sorted(RANGES)}")
-    return await call("portfolio_history", range)
-
-
-@mcp.tool(annotations=READ_ONLY)
 async def performance(isin: str, exchange: str = "LSX") -> dict:
     """Return current instrument performance for an exchange.
 
