@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pytr-mcp"
+version = "0.1.0"
+description = "Use TradeRepublic in coding harnesses"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=2,<3",
+    "pytr",
+]
+
+[project.scripts]
+pytr-mcp = "pytr_mcp.mcp:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pytr_mcp"]
