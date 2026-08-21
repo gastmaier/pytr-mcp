@@ -280,11 +280,4 @@ class PytrMcpApi:
         return [{"sector": sector.replace("_", " ").title(), "marketCap": round(bucket["marketCap"], 2), "dailyRelativePct": round(bucket["weightedChange"] / bucket["marketCap"] * 100, 2), "stockCount": len(bucket["stocks"]), "topStocks": sorted(bucket["stocks"], key=lambda stock: stock["marketCap"], reverse=True)[:5]} for sector, bucket in sorted(buckets.items(), key=lambda entry: entry[1]["marketCap"], reverse=True)]
 
     async def portfolio_chart(self, account_number, range="1d", currency="EUR"):
-        def fetch():
-            response = self.tr._websession.get(
-                f"{self.tr._host}/api-gateway/portfolio-chart/v2/chart",
-                params={"secAccNo": account_number, "range": range, "currency": currency},
-            )
-            response.raise_for_status()
-            return response.json()
-        return await asyncio.to_thread(fetch)
+        return await self.tr.portfolio_chart(account_number, range, currency)
