@@ -1,0 +1,11 @@
+[Unit]
+Description=Trade Republic MCP Unix socket
+
+[Socket]
+ListenStream=%t/pytr-mcp/mcp.sock
+SocketMode=0600
+DirectoryMode=0700
+Accept=yes
+
+[Install]
+WantedBy=sockets.target

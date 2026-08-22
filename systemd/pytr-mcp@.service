@@ -1,0 +1,19 @@
+[Unit]
+Description=Trade Republic MCP connection (%i)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/.local/share/pytr-mcp
+ExecStart=%h/.local/share/pytr-mcp/venv/bin/pytr-mcp --allow-orders --allow-watchlist
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+
+LoadCredential=login:%h/.local/share/pytr-mcp/login.txt
+Environment=PYTR_MCP_COOKIES_FILE=%h/.local/share/pytr-mcp/cookies.txt
+
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+Restart=no

@@ -1,0 +1,12 @@
+[Unit]
+Description=Trade Republic MCP socket
+Requires=pytr-mcp.socket
+After=pytr-mcp.socket
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/true
+RemainAfterExit=yes
+
+[Install]
+WantedBy=default.target

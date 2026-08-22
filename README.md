@@ -8,8 +8,10 @@ It uses only the new API (v2), since the approve push notification is a nice bon
 
 ## Quickstart
 
-The MCP intentionally only implements stdio, to force you to secure it. It is
-recommended to use [rmcp-mux](https://github.com/VetCoders/rmcp-mux) to expose
-it through a unix socket; then only this socket is readable by the linux
-namespace where your coding harness runs. Don't bind the mcp source code or
-credentials files to the coding harness namespace, please.
+The MCP intentionally only implements stdio. `systemd` provides templates on
+how to integrate with systemd. `pytr-mcp.socket` uses systemd socket activation
+(`Accept=yes`) to give each Unix-socket connection to a separate stdio server
+process. Only bind that socket into the coding-harness namespace; do not bind
+the MCP source code or credentials files. Install both `pytr-mcp.socket` and
+`pytr-mcp@.service` as user units, then enable the socket with
+`systemctl --user enable --now pytr-mcp.socket`.

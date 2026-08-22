@@ -1,6 +1,0 @@
-[servers.pytr-mcp]
-socket = "/run/user/1000/pytr-mcp/mcp.sock"
-cmd = "/home/me/.local/share/venv/pi/bin/pytr-mcp"
-args = ["--allow-watchlist"]
-heartbeat_enabled = false
-max_restarts = 0
