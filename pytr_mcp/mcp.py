@@ -635,17 +635,17 @@ async def price_alarms() -> str:
     """Get active and triggered price alarms as compact CSV with asset names.
 
     Return example (CSV):
-      name,instrumentId,status,createdPrice,targetPrice,createdAt,triggeredAt
-      APPLE INC.,US0378331005,active,180.0,190.0,1750000000000
+      name,id,instrumentId,status,createdPrice,targetPrice,createdAt,triggeredAt
+      APPLE INC.,xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx,US0378331005,active,180.0,190.0,1750000000000
     """
     alarms = await call("price_alarm_overview")
     output = StringIO()
     writer = csv.writer(output, lineterminator="\n")
-    writer.writerow(["name", "instrumentId", "status", "createdPrice", "targetPrice", "createdAt", "triggeredAt"])
+    writer.writerow(["name", "id", "instrumentId", "status", "createdPrice", "targetPrice", "createdAt", "triggeredAt"])
     for alarm in alarms:
         writer.writerow([
             alarm["name"],
-            *(alarm.get(field) or "" for field in ("instrumentId", "status", "createdPrice", "targetPrice", "createdAt", "triggeredAt")),
+            *(alarm.get(field) or "" for field in ("id", "instrumentId", "status", "createdPrice", "targetPrice", "createdAt", "triggeredAt")),
         ])
     return output.getvalue().rstrip("\n")
 
